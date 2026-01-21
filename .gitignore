@@ -1,0 +1,202 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Gradio cache
+.gradio/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+log_*.txt
+*.json.log
+api_usage_*.json
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# Model weights and cache
+model-weights/
+models--*/
+.cache/
+huggingface/
+torch_cache/
+
+# Data files (if large)
+data/*.json
+data/*.csv
+data/stats/
+
+# Figures and media (if too large)
+chestagentbench/figures/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp4
+*.avi
+*.mov
+
+# Keep specific assets
+!assets/
+!assets/*.jpg
+!assets/*.png
+!assets/*.gif
+!assets/*.mp4
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# pytype
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# Compiled source
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Packages
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Checkpoints
+checkpoints/
+*.ckpt
+*.pth
+*.pt
+*.safetensors
+
+# Gradio
+gradio_cached_examples/
+flagged/
+
+# Benchmark results
+benchmark_results/
+results/
+outputs/
+
+# Secrets
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+
+# Local config
+config.local.json
+settings.local.json
+
+# Deployment
+.vercel
+.netlify
+
+# Documentation builds
+docs/_build/
+site/
+
+# IDE
+*.sublime-project
+*.sublime-workspace
+
+# Profiling
+*.prof
+*.lprof
+
+# Keep important files
+!README.md
+!LICENSE
+!requirements.txt
+!pyproject.toml
+!.gitignore
+!chestagentbench/metadata.jsonl
+!chestagentbench/README.md
