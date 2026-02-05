@@ -2,15 +2,21 @@
 Conflict detection and resolution for MedRAX tool outputs.
 Implements explicit conflict detection with rule-based and probabilistic approaches.
 Now includes BERT-based semantic conflict detection for textual outputs.
+
+Premium Resolution: Argumentation Graph + Weighted Tool Trust + Uncertainty Abstention
 """
 
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import json
+import os
 
 from .canonical_output import CanonicalFinding
 from .anatomical_consistency_graph import GACLConflictDetector
+from .argumentation_graph import ArgumentGraphBuilder, ArgumentGraph
+from .tool_trust import ToolTrustManager
+from .abstention_logic import AbstentionLogic, AbstentionReason
 
 # Note: BERT detector is now lazy-loaded within ConflictDetector class
 # Use ConflictDetector.bert_detector property instead of a module-level function
@@ -463,12 +469,19 @@ class ConflictDetector:
 
 class ConflictResolver:
     """
-    Resolves conflicts using task-aware arbitration, BERT scores, and tool expertise hierarchy.
+    Resolves conflicts using PREMIUM strategy: Argumentation Graph + Weighted Tool Trust + Uncertainty Abstention
     
-    Resolution Strategy:
-    1. If BERT scores available: Use contradiction/entailment probabilities for decision weighting
-    2. Task-aware: Trust primary expert tool for specific task types
-    3. Confidence-weighted fallback: Average findings weighted by confidence
+    Resolution Strategy (Premium - with three new components):
+    1. Build ArgumentGraph: Structure disagreement as explicit support/attack positions
+    2. Apply ToolTrust: Weight opinions by historical tool reliability (learns over time)
+    3. Check Abstention: Know when to say "I don't know, needs human review"
+    4. Fallback to original logic: BERT scores + task-aware arbitration (backward compatible)
+    
+    Backward Compatibility:
+    - Returns same dict format as before
+    - Adds new optional fields: argumentation_graph, tool_weights_used, abstention_reason
+    - Existing tests continue to pass
+    - Original logic still applies as fallback
     """
     
     # Tool expertise hierarchy: which tool is best for which task
@@ -500,31 +513,67 @@ class ConflictResolver:
     BERT_MODERATE_CONTRADICTION = 0.70  # Moderate contradiction
     BERT_HIGH_ENTAILMENT = 0.70  # Tools agree (not a real conflict)
     
-    def __init__(self, deferral_threshold: float = 0.6):
+    def __init__(
+        self, 
+        deferral_threshold: float = 0.6,
+        enable_argumentation: bool = True,
+        enable_tool_trust: bool = True,
+        enable_abstention: bool = True,
+        trust_weights_file: Optional[str] = None
+    ):
         """
-        Initialize conflict resolver.
+        Initialize conflict resolver with premium features.
         
         Args:
             deferral_threshold: Confidence below which we defer to humans
+            enable_argumentation: Use argumentation graphs? (default: True)
+            enable_tool_trust: Use learned tool trust weights? (default: True)
+            enable_abstention: Use abstention logic? (default: True)
+            trust_weights_file: JSON file to persist/load tool trust weights
+                               If None, will use default location in agent folder
         """
         self.deferral_threshold = deferral_threshold
+        self.enable_argumentation = enable_argumentation
+        self.enable_tool_trust = enable_tool_trust
+        self.enable_abstention = enable_abstention
+        
+        # Initialize premium components
+        self.argument_builder = ArgumentGraphBuilder()
+        
+        # Setup trust weights file
+        if trust_weights_file is None:
+            # Default location: same folder as this file
+            trust_weights_file = os.path.join(
+                os.path.dirname(__file__),
+                "tool_trust_weights.json"
+            )
+        self.trust_manager = ToolTrustManager(persistence_file=trust_weights_file)
+        
+        # Initialize abstention logic
+        self.abstention_logic = AbstentionLogic()
     
     def resolve_conflict(self, conflict: Conflict, findings: List[CanonicalFinding]) -> Dict[str, Any]:
         """
-        Resolve a conflict using BERT scores and task-aware arbitration.
+        Resolve a conflict using PREMIUM strategy + fallback logic.
         
-        Resolution Pipeline:
-        1. Check BERT scores: High entailment → may not be a real conflict
-        2. High contradiction + clear confidence leader → trust higher confidence tool
-        3. Task-aware arbitration: Trust primary expert tool
-        4. Confidence-weighted average as fallback
+        NEW Resolution Pipeline (PREMIUM):
+        1. Build ArgumentGraph: Visualize support/attack structure
+        2. Apply ToolTrust: Weight by learned reliability
+        3. Check Abstention: Know when to say "I don't know"
+        
+        FALLBACK (Original logic - backward compatible):
+        4. BERT scores: High entailment → not a real conflict
+        5. BERT-guided: High contradiction + confidence leader
+        6. Task-aware arbitration: Trust primary expert tool
+        7. Weighted average: Last resort
         
         Args:
             conflict: Detected conflict (may contain bert_scores)
             findings: All findings related to this conflict
             
         Returns:
-            Resolution dict with decision, confidence, reasoning, and bert_analysis
+            Resolution dict with decision, confidence, reasoning
+            NEW fields: argumentation_graph, tool_weights_used, abstention_reason (when applicable)
         """
         resolution = {}
         
@@ -541,13 +590,82 @@ class ConflictResolver:
                              f"This may be a false positive conflict.",
                 "should_defer": False,
                 "bert_analysis": bert_analysis,
-                "value": None,  # No need to pick a side if they agree
+                "value": None,
             }
+        
+        # ===== PREMIUM COMPONENT #1: BUILD ARGUMENT GRAPH =====
+        argument_graph = None
+        if self.enable_argumentation and len(findings) >= 1:
+            try:
+                # Get tool trust weights if enabled
+                trust_weights = None
+                if self.enable_tool_trust:
+                    trust_weights = {
+                        finding.source_tool: self.trust_manager.get_weight(finding.source_tool)
+                        for finding in findings
+                    }
+                
+                # Build the argument graph
+                argument_graph = self.argument_builder.build_from_conflict(
+                    claim=f"{conflict.finding} present",
+                    tools_involved=[f.source_tool for f in findings],
+                    confidences=[f.confidence for f in findings],
+                    values=[f.pathology for f in findings],
+                    tool_trust_weights=trust_weights
+                )
+                resolution["argumentation_graph"] = argument_graph.to_dict()
+                
+                if self.enable_tool_trust and trust_weights:
+                    resolution["tool_weights_used"] = trust_weights
+            except Exception as e:
+                print(f"⚠️  Argumentation graph building failed: {e}")
+        
+        # ===== PREMIUM COMPONENT #2: CHECK ABSTENTION =====
+        abstention_reason = None
+        if self.enable_abstention and argument_graph:
+            try:
+                abstention_decision = self.abstention_logic.should_abstain(
+                    support_strength=argument_graph.support_strength,
+                    attack_strength=argument_graph.attack_strength,
+                    certainty=argument_graph.certainty,
+                    has_cycles=argument_graph.has_cycles,
+                    clinical_severity=conflict.severity,
+                    num_tools=len(findings),
+                    bert_contradiction_prob=bert_analysis.get("contradiction_prob", 0.0)
+                )
+                
+                if abstention_decision.should_abstain:
+                    abstention_reason = abstention_decision.reason.value
+                    resolution["abstention_reason"] = abstention_reason
+                    resolution["abstention_explanation"] = abstention_decision.explanation
+                    resolution["risk_level"] = abstention_decision.risk_level
+                    
+                    return {
+                        "decision": "abstained",
+                        "confidence": 0.0,
+                        "value": None,
+                        "reasoning": f"Abstaining from resolution: {abstention_decision.explanation}",
+                        "should_defer": True,
+                        "abstention_reason": abstention_reason,
+                        "abstention_explanation": abstention_decision.explanation,
+                        "risk_level": abstention_decision.risk_level,
+                        "argumentation_graph": argument_graph.to_dict(),
+                        "bert_analysis": bert_analysis,
+                    }
+            except Exception as e:
+                print(f"⚠️  Abstention check failed: {e}")
+        
+        # ===== FALLBACK: ORIGINAL RESOLUTION LOGIC (Backward Compatible) =====
         
         # STEP 2: BERT-guided resolution for high-confidence contradictions
         if bert_analysis.get("contradiction_prob", 0) > self.BERT_HIGH_CONTRADICTION:
             bert_resolution = self._bert_guided_resolution(findings, bert_analysis)
             if bert_resolution:
+                # Add premium components if available
+                if argument_graph:
+                    bert_resolution["argumentation_graph"] = argument_graph.to_dict()
+                if resolution.get("tool_weights_used"):
+                    bert_resolution["tool_weights_used"] = resolution["tool_weights_used"]
                 return bert_resolution
         
         # STEP 3: Determine task type and use expertise hierarchy
@@ -602,6 +720,15 @@ class ConflictResolver:
         else:
             # STEP 5: Weighted average resolution as last resort
             resolution = self._weighted_average_resolution(findings, bert_analysis)
+        
+        # Add premium components if available
+        if argument_graph and "argumentation_graph" not in resolution:
+            resolution["argumentation_graph"] = argument_graph.to_dict()
+        if resolution.get("tool_weights_used") is None and self.enable_tool_trust:
+            resolution["tool_weights_used"] = {
+                f.source_tool: self.trust_manager.get_weight(f.source_tool)
+                for f in findings
+            }
         
         return resolution
     
@@ -799,6 +926,66 @@ class ConflictResolver:
             True if should defer to radiologist
         """
         return resolution.get("should_defer", False)
+    
+    def update_trust_from_resolution(
+        self,
+        resolution: Dict[str, Any],
+        was_correct: bool,
+        findings: List[CanonicalFinding]
+    ) -> Dict[str, float]:
+        """
+        Update tool trust weights based on resolution feedback.
+        
+        Call this after a resolution is confirmed correct or incorrect by radiologist.
+        
+        Args:
+            resolution: The resolution dict returned by resolve_conflict()
+            was_correct: True if resolution was confirmed correct, False if wrong
+            findings: Original findings involved in the conflict
+            
+        Returns:
+            Updated trust weights for all tools involved
+        """
+        if not self.enable_tool_trust:
+            return {}
+        
+        # Update the selected tool (if one was chosen)
+        selected_tool = resolution.get("selected_tool")
+        if selected_tool:
+            self.trust_manager.update_trust(selected_tool, was_correct)
+        
+        # Also update other tools based on whether their prediction aligned with outcome
+        for finding in findings:
+            tool_name = finding.source_tool
+            # Tool was "correct" if its presence/absence aligned with the resolution
+            tool_was_correct = (finding.confidence > 0.5) == resolution.get("value", False)
+            if resolution.get("decision") != "abstained":
+                self.trust_manager.update_trust(tool_name, tool_was_correct and was_correct)
+        
+        return self.trust_manager.get_all_weights()
+    
+    def get_tool_statistics(self) -> Dict[str, Dict]:
+        """
+        Get statistics on all tools' historical performance.
+        
+        Useful for understanding which tools are trustworthy.
+        
+        Returns:
+            Dict mapping tool names to their statistics
+        """
+        return self.trust_manager.get_all_stats()
+    
+    def reset_tool_trust(self, tool_name: Optional[str] = None) -> None:
+        """
+        Reset tool trust weights.
+        
+        Args:
+            tool_name: Specific tool to reset, or None to reset all
+        """
+        if tool_name:
+            self.trust_manager.reset_tool(tool_name)
+        else:
+            self.trust_manager.reset_all()
 
 
 def generate_conflict_report(conflicts: List[Conflict], resolutions: List[Dict[str, Any]] = None) -> str:

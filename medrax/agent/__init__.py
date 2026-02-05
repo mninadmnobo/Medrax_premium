@@ -18,6 +18,21 @@ from .conflict_resolution import (
     ConflictResolver,
     generate_conflict_report
 )
+from .argumentation_graph import (
+    ArgumentNode,
+    ArgumentGraph,
+    ArgumentGraphBuilder,
+    ArgumentGraphVisualizer
+)
+from .tool_trust import (
+    ToolTrust,
+    ToolTrustManager
+)
+from .abstention_logic import (
+    AbstentionReason,
+    AbstentionDecision,
+    AbstentionLogic
+)
 from .confidence_scoring import (
     ModelOutput,
     ConfidenceResult,
@@ -55,12 +70,23 @@ __all__ = [
     "normalize_grounding_output",
     "normalize_report_output",
     "normalize_generation_output",
-    "get_confidence_pipeline",
-    # Conflict resolution
+    "get_confidence_pipeline",    # Conflict resolution
     "Conflict",
     "ConflictDetector",
     "ConflictResolver",
     "generate_conflict_report",
+    # Argumentation graph
+    "ArgumentNode",
+    "ArgumentGraph",
+    "ArgumentGraphBuilder",
+    "ArgumentGraphVisualizer",
+    # Tool trust
+    "ToolTrust",
+    "ToolTrustManager",
+    # Abstention logic
+    "AbstentionReason",
+    "AbstentionDecision",
+    "AbstentionLogic",
     # Confidence scoring
     "ModelOutput",
     "ConfidenceResult",
