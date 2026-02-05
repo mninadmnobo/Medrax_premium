@@ -9,51 +9,24 @@
 
 ## 📋 Table of Contents
 
-- [📋 Table of Contents](#-table-of-contents)
 - [Abstract](#abstract)
 - [MedRAX Overview](#medrax-overview)
-  - [Integrated Tools](#integrated-tools)
 - [ChestAgentBench](#chestagentbench)
-- [Advanced: Conflict Detection \& Resolution Pipeline](#advanced-conflict-detection--resolution-pipeline)
-  - [System Overview](#system-overview)
-  - [Technical Foundation](#technical-foundation)
-  - [1. Conflict Detection Engine](#1-conflict-detection-engine)
-    - [**Multi-Method Detection Approach**](#multi-method-detection-approach)
-      - [**a) BERT-Based Semantic NLI (Primary)**](#a-bert-based-semantic-nli-primary)
-      - [**b) Rule-Based Confidence Gap Analysis (Fallback)**](#b-rule-based-confidence-gap-analysis-fallback)
-      - [**c) Anatomical Consistency Validation**](#c-anatomical-consistency-validation)
-  - [2. Confidence Calibration \& Fusion](#2-confidence-calibration--fusion)
-  - [3. Argumentation Graphs](#3-argumentation-graphs)
-  - [4. Tool Trust Management](#4-tool-trust-management)
-  - [5. Intelligent Abstention Logic](#5-intelligent-abstention-logic)
-  - [Full Conflict Resolution Workflow Example](#full-conflict-resolution-workflow-example)
-  - [Configuration](#configuration)
-  - [Conflict Resolution Outputs](#conflict-resolution-outputs)
+- [Conflict Detection & Resolution Pipeline](#advanced-conflict-detection--resolution-pipeline)
+  - [Motivation](#motivation)
+  - [System Architecture](#system-architecture)
+  - [Layer 1 — Conflict Detection](#layer-1-conflict-detection)
+  - [Layer 2 — Confidence Calibration and Fusion](#layer-2-confidence-calibration-and-fusion)
+  - [Layer 3 — Argumentation Graphs](#layer-3-argumentation-graphs)
+  - [Layer 4 — Tool Trust Management](#layer-4-tool-trust-management)
+  - [Layer 5 — Intelligent Abstention](#layer-5-intelligent-abstention)
+  - [End-to-End Pipeline Integration](#end-to-end-pipeline-integration)
+  - [Design Principles](#design-principles)
 - [Installation](#installation)
-  - [Prerequisites](#prerequisites)
-  - [Installation Steps](#installation-steps)
-  - [Getting Started](#getting-started)
 - [Tool Selection and Initialization](#tool-selection-and-initialization)
-- [Automatically Downloaded Models](#automatically-downloaded-models)
-  - [Classification Tool](#classification-tool)
-  - [Segmentation Tool](#segmentation-tool)
-  - [Grounding Tool](#grounding-tool)
-  - [LLaVA-Med Tool](#llava-med-tool)
-  - [Report Generation Tool](#report-generation-tool)
-  - [Visual QA Tool](#visual-qa-tool)
-  - [MedSAM Tool](#medsam-tool)
-  - [Utility Tools](#utility-tools)
-- [Manual Setup Required](#manual-setup-required)
-  - [Image Generation Tool](#image-generation-tool)
+- [Model Management](#automatically-downloaded-models)
 - [Configuration Notes](#configuration-notes)
-  - [Required Parameters](#required-parameters)
-  - [Memory Management](#memory-management)
-  - [Local LLMs](#local-llms)
-  - [Optional: OpenAI-compatible Providers](#optional-openai-compatible-providers)
-- [Star History](#star-history)
-- [Authors \& Citation](#authors--citation)
-  - [Authors](#authors)
-- [Citation](#citation)
+- [Authors & Citation](#authors--citation)
 
 <br>
 
@@ -118,512 +91,202 @@ python quickstart.py \
 
 ## Advanced: Conflict Detection & Resolution Pipeline
 
-Medical image interpretation often results in conflicting outputs from specialized AI tools due to model bias, dataset differences, and task-specific training. MedRAX implements a sophisticated **multi-layer conflict detection and resolution system** that:
+### Motivation
 
-- **Detects contradictions** using BERT-based semantic NLI and confidence gap analysis
-- **Validates anatomical consistency** to eliminate physically impossible interpretations  
-- **Calibrates confidence scores** across heterogeneous tool outputs
-- **Structures arguments** using formal argumentation graphs with explicit reasoning traces
-- **Learns tool reliability** through persistent trust weight management
-- **Intelligently abstains** when confidence is too low, flagging critical findings for human review
+When multiple specialized AI models interpret the same chest X-ray, disagreements are inevitable. Each model carries inherent biases from its training data, architecture, and optimization objective. A DenseNet-121 classifier trained on NIH ChestX-ray14 may flag cardiomegaly with 89% confidence, while a CheXagent visual question-answering model trained on MIMIC-CXR reports the heart size as normal. Neither model is universally wrong—they simply encode different priors from different patient populations, labelling conventions, and learning paradigms.
 
-This ensures **clinical safety** and prevents potentially dangerous misdiagnoses in critical care scenarios.
+In clinical practice, such contradictions are dangerous. A false negative on a tension pneumothorax or a missed cardiomegaly in a heart failure patient can delay life-saving intervention. Conversely, a false positive may trigger unnecessary procedures, increasing patient morbidity and healthcare costs. MedRAX addresses this fundamental challenge through a principled, five-layer conflict detection and resolution pipeline that systematically identifies disagreements, quantifies uncertainty, structures evidence, and—when the evidence is insufficient—defers to human expertise rather than forcing an unreliable decision.
 
-### System Overview
+---
 
-The conflict management pipeline consists of **5 integrated, interconnected components**:
+### System Architecture
+
+The pipeline processes tool outputs through five sequential, tightly integrated layers. Each layer refines the decision state before passing it to the next, producing a final resolved output accompanied by a calibrated confidence score and a complete reasoning trace.
 
 ```
-Tool Outputs (7+ models)
-        ↓
-┌─────────────────────────────────────────────────────┐
-│  Layer 1: CONFLICT DETECTION                         │
-│  - Rule-based confidence gap analysis                │
-│  - BERT-based semantic NLI (Natural Language Infr.)  │
-│  - Anatomical consistency validation                 │
-└─────────────────────────────────────────────────────┘
-        ↓
-┌─────────────────────────────────────────────────────┐
-│  Layer 2: CONFIDENCE CALIBRATION                     │
-│  - Task-specific raw score extraction                │
-│  - Min-max normalization across tools                │
-│  - Isotonic regression / temperature scaling         │
-│  - Cross-model fusion                                │
-└─────────────────────────────────────────────────────┘
-        ↓
-┌─────────────────────────────────────────────────────┐
-│  Layer 3: ARGUMENTATION GRAPHS                       │
-│  - Structure conflicts as explicit argument graphs   │
-│  - Support vs attack edges with weighted strengths   │
-│  - Cycle detection for circular logic                │
-│  - Certainty scoring for decision clarity            │
-└─────────────────────────────────────────────────────┘
-        ↓
-┌─────────────────────────────────────────────────────┐
-│  Layer 4: TOOL TRUST MANAGEMENT                      │
-│  - Historical performance tracking (correct/total)   │
-│  - Weighted voting based on tool reliability         │
-│  - Persistent trust weights across sessions          │
-│  - Real-time weight updates after resolution         │
-└─────────────────────────────────────────────────────┘
-        ↓
-┌─────────────────────────────────────────────────────┐
-│  Layer 5: INTELLIGENT ABSTENTION                     │
-│  - Detect when confidence is too low                 │
-│  - Flag critical findings requiring human review     │
-│  - Risk-aware decision thresholds                    │
-│  - Clinical severity-based escalation                │
-└─────────────────────────────────────────────────────┘
-        ↓
-Resolved Output + Confidence + Reasoning Trace
+Tool Outputs (7+ specialized models)
+        │
+        ▼
+┌──────────────────────────────────────────────────────┐
+│  Layer 1 ─ CONFLICT DETECTION                        │
+│  Semantic NLI · Confidence Gap · Anatomical GACL     │
+└──────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────┐
+│  Layer 2 ─ CONFIDENCE CALIBRATION & FUSION           │
+│  Task-specific extraction · Normalization ·           │
+│  Isotonic regression · Temperature scaling            │
+└──────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────┐
+│  Layer 3 ─ ARGUMENTATION GRAPHS                      │
+│  Support / Attack edges · Trust-weighted strengths ·  │
+│  Cycle detection · Certainty scoring                  │
+└──────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────┐
+│  Layer 4 ─ TOOL TRUST MANAGEMENT                     │
+│  Historical accuracy tracking · Bayesian updating ·   │
+│  Persistent weights · Weighted voting                 │
+└──────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────┐
+│  Layer 5 ─ INTELLIGENT ABSTENTION                    │
+│  Risk-aware thresholds · Clinical severity gates ·    │
+│  Cycle-based rejection · Human deferral               │
+└──────────────────────────────────────────────────────┘
+        │
+        ▼
+  Resolved Finding + Calibrated Confidence + Reasoning Trace
 ```
 
 ---
 
-### Technical Foundation
+### Layer 1: Conflict Detection
 
-**Problem Statement:** When multiple specialized models interpret the same CXR, they may disagree due to:
-1. **Dataset bias**: Training on different patient populations or imaging protocols
-2. **Task specialization**: Each model optimized for specific pathologies
-3. **Architectural differences**: Different CNN/transformer backbones with different inductive biases
-4. **Confidence calibration mismatch**: Raw scores not directly comparable across models
+The first layer employs a multi-method detection strategy that combines deep semantic understanding with efficient numerical heuristics and domain-specific anatomical knowledge. Findings from all active tools are grouped by pathology, and every pair of tool outputs within the same pathology group is examined for disagreement.
 
-**Solution**: A formal multi-layer framework combining NLP, symbolic reasoning, and probabilistic inference.
+#### 1.1 BERT-Based Semantic Natural Language Inference
 
-| Component | Purpose | Technology |
-|-----------|---------|-----------|
-| **Conflict Detection** | Identify disagreements systematically | BERT-NLI + rule-based analysis |
-| **Confidence Calibration** | Normalize heterogeneous scores | Isotonic regression + temperature scaling |
-| **Argumentation Graphs** | Explain reasoning transparently | Weighted argumentation frameworks (AF) |
-| **Trust Management** | Learn tool reliability over time | Bayesian performance tracking |
-| **Abstention Logic** | Know when to defer to humans | Risk-aware thresholds + clinical severity |
+The primary detection mechanism leverages a fine-tuned DeBERTa model (He et al., 2021) trained on 433K examples from the Multi-Genre Natural Language Inference (MultiNLI) and Stanford Natural Language Inference (SNLI) corpora. Given two textual statements produced by different tools, the model classifies their relationship into one of three categories:
 
----
+| Label | Interpretation | Action |
+|-------|---------------|--------|
+| **Contradiction** | The statements are mutually exclusive | Conflict flagged; resolution pipeline activated |
+| **Neutral** | The statements address different aspects of the image | No conflict; findings are complementary |
+| **Entailment** | The statements convey the same clinical meaning | No conflict; findings can be directly fused |
 
-### 1. Conflict Detection Engine
+This approach captures semantic equivalences that surface-level string matching would miss. For example, "pneumothorax present" and "the right lung is collapsed" describe the same clinical finding using entirely different vocabulary; the NLI model correctly identifies this as entailment rather than a spurious conflict. Conversely, "mild pulmonary edema" and "no evidence of pulmonary edema" are correctly classified as a contradiction despite sharing most of their surface tokens.
 
-#### **Multi-Method Detection Approach**
+The model outputs a probability distribution over all three classes. A conflict is declared when the contradiction probability exceeds a configurable threshold (default: 0.7), and the severity is graded as *critical* (>0.85), *moderate* (0.70–0.85), or *minor* (<0.70) to enable risk-stratified downstream handling.
 
-##### **a) BERT-Based Semantic NLI (Primary)**
+#### 1.2 Rule-Based Confidence Gap Analysis
 
-Uses state-of-the-art Natural Language Inference (NLI) to detect semantic conflicts in textual outputs from different tools:
+When tools produce structured numerical outputs rather than free text—for instance, a classification model returning a probability vector—a lightweight rule-based detector serves as a complementary fallback. The method computes the absolute difference between confidence scores assigned by different tools to the same pathology. If the gap exceeds a sensitivity threshold (default: 0.4), a conflict is flagged.
 
-```python
-from medrax.agent.bert_conflict_detector import BERTConflictDetector
+Severity is assigned proportionally: a gap exceeding 0.7 (e.g., one tool reporting 92% probability of cardiomegaly while another reports 15%) is classified as critical, gaps between 0.4 and 0.7 as moderate, and gaps below 0.4 as minor. This method operates in O(1) time per tool pair, making it suitable as a real-time screening layer when BERT inference latency is a concern.
 
-# Initialize detector with Microsoft DeBERTa-MNLI
-detector = BERTConflictDetector(
-    nli_model_name="microsoft/deberta-base-mnli",  # 433K NLI examples training
-    conflict_threshold=0.7,
-    device="cuda"
-)
+#### 1.3 Anatomical Consistency Validation (GACL)
 
-# Example: Detect contradiction between tool outputs
-result = detector.detect_conflict(
-    text1="Pneumothorax present, occupying 15% of hemithorax",
-    text2="No pneumothorax detected in this study"
-)
+The third detection method applies domain-specific medical knowledge through Graph-based Anatomical Consistency Logic (GACL). Rather than relying on disease-specific rules, GACL encodes universal radiological attribute axes that generalize across all CXR findings:
 
-print(result.to_dict())
-# Output:
-# {
-#     "has_conflict": True,
-#     "conflict_probability": 0.92,           # 92% confidence = contradiction
-#     "entailment_prob": 0.03,                # 3% = agreement
-#     "neutral_prob": 0.05,                   # 5% = complementary info
-#     "conflict_type": "contradiction",
-#     "explanation": "Statement 2 directly contradicts Statement 1"
-# }
-```
+| Attribute | Values | Clinical Meaning |
+|-----------|--------|-----------------|
+| **Occupancy** | Present, Absent | Whether a finding exists in a given region |
+| **Aeration** | Normal, Decreased, Absent | Degree of air content in lung parenchyma |
+| **Density** | Air, Fluid, Soft Tissue, Calcified | Radiodensity of the abnormality |
+| **Volume** | Increased, Decreased, Normal | Size relative to anatomical norm |
+| **Mass Effect** | Shift, Compression, None | Impact on adjacent structures |
 
-**Technical Implementation:**
-- **Model Architecture**: Microsoft DeBERTa (Decoding-enhanced BERT) with 433K MNLI + SNLI fine-tuning
-- **Classification Scheme**:
-  - `CONTRADICTION` (class 0): Tools strongly disagree → **Triggers conflict resolution**
-  - `NEUTRAL` (class 1): Statements discuss different aspects → **No direct conflict**
-  - `ENTAILMENT` (class 2): Tools essentially agree → **No conflict, can be fused**
-- **Advantages**:
-  - Catches semantic conflicts missed by simple string matching
-  - Example: "Pneumothorax present" vs "Lung is collapsed" → Correctly identified as **agreement** (same finding, different terminology)
-  - Example: "Mild edema" vs "No pulmonary edema" → Correctly identified as **contradiction**
-  - Handles paraphrases, synonyms, and medical terminology variations
-
-##### **b) Rule-Based Confidence Gap Analysis (Fallback)**
-
-For faster detection when BERT overhead is unacceptable:
-
-```python
-# Automatic fallback when tools provide structured output
-confidence_tool_a = 0.92  # "Cardiomegaly present"
-confidence_tool_b = 0.15  # "Cardiomegaly absent"
-
-confidence_gap = abs(confidence_tool_a - confidence_tool_b)
-# Gap = 0.77 > THRESHOLD (0.4) → CONFLICT DETECTED
-
-# Severity levels:
-# - Critical: gap > 0.7 (e.g., 0.92 vs 0.05)
-# - Moderate: gap 0.4-0.7 (e.g., 0.85 vs 0.25)
-# - Minor: gap < 0.4 (e.g., 0.55 vs 0.25)
-```
-
-**Key Features:**
-- **Speed**: O(1) complexity compared to BERT's O(n) encoding
-- **Fallback Strategy**: Used when tools output numerical confidences without text
-- **Severity Classification**: Enables risk-stratified conflict handling
-
-##### **c) Anatomical Consistency Validation**
-
-Validates if conflicting findings violate anatomical constraints (GACL - Graph-based Anatomical Consistency Logic):
-
-```python
-from medrax.agent.anatomical_consistency_graph import GACLConflictDetector
-
-consistency_checker = GACLConflictDetector()
-
-# Define findings with anatomical attributes
-findings = {
-    "pneumothorax": {
-        "occupancy": "present",
-        "aeration": "absent",
-        "density": "air",
-        "volume_change": "increased"
-    },
-    "pleural_effusion": {
-        "occupancy": "present",
-        "aeration": "decreased",
-        "density": "fluid",
-        "volume_change": "normal"
-    }
-}
-
-# Check for anatomical incompatibilities
-incompatibilities = consistency_checker.check_incompatibilities(findings)
-# Returns list of findings that physically cannot coexist based on anatomy
-```
-
-**Universal Attribute Axes** (works for ANY pathology):
-- **Occupancy**: Present / Absent
-- **Aeration**: Normal / Decreased / Absent
-- **Density**: Air / Fluid / Soft Tissue / Calcified
-- **Volume**: Increased / Decreased / Normal
-- **Mass Effect**: Shift / Compression / None
-
-**Validation Logic:**
-- Graph-based incompatibility checking (edges define valid relationships)
-- Catches physically impossible combinations (e.g., pneumothorax + consolidated lung tissue in same space)
-- Medical knowledge from radiology literature encoded as constraints
+These axes are connected through an incompatibility graph whose edges encode physically impossible combinations derived from radiology literature. For example, a region simultaneously exhibiting increased aeration (air trapping) and fluid-density opacity violates basic physics and is flagged as anatomically inconsistent. This layer catches conflicts that are invisible to both statistical NLI and simple numerical comparison—cases where two findings may each be individually plausible but cannot coexist in the same anatomical space.
 
 ---
 
-### 2. Confidence Calibration & Fusion
+### Layer 2: Confidence Calibration and Fusion
 
-Different tools output confidence scores in different formats and scales. MedRAX normalizes and calibrates them using multiple techniques:
+The heterogeneous tools integrated into MedRAX produce confidence scores in fundamentally different formats and scales. A DenseNet-121 classifier outputs sigmoid probabilities in [0, 1], a LLaVA-Med visual question-answering model embeds confidence linguistically ("high confidence," "likely present"), and a Maira-2 grounding model returns bounding-box localization scores on an arbitrary scale. Direct comparison of these raw scores is statistically invalid.
 
-```python
-from medrax.agent.confidence_scoring import ConfidenceScorer, TaskType
+MedRAX addresses this through a model-agnostic confidence scoring pipeline implemented via task-specific extractors. Each tool type has a dedicated extractor that maps its native output format onto a standardized `ConfidenceResult` schema containing a raw score, a calibrated score, and an uncertainty estimate.
 
-scorer = ConfidenceScorer()
+Calibration proceeds through three complementary methods:
 
-# Tool outputs in heterogeneous formats
-tool_outputs = [
-    {
-        "task_type": "classification",
-        "model_name": "DenseNet-121",
-        "raw_output": {
-            "pneumothorax_prob": 0.89,
-            "cardiomegaly_prob": 0.72
-        }
-    },
-    {
-        "task_type": "vqa",
-        "model_name": "LLaVA-Med",
-        "raw_output": "Pneumothorax is present with high confidence"
-    },
-    {
-        "task_type": "grounding",
-        "model_name": "Maira-2",
-        "raw_output": 0.85  # Confidence in localization
-    }
-]
+**Min-Max Normalization** maps raw scores to the [0, 1] interval when the output bounds are known, preserving ordinal ranking while enabling cross-model comparison.
 
-# Normalize to [0, 1] range
-calibrated_scores = scorer.calibrate_outputs(tool_outputs)
+**Isotonic Regression** learns a non-parametric, monotonically non-decreasing mapping from raw scores to true probabilities using historically verified resolutions as ground truth. Unlike parametric methods, isotonic regression makes no distributional assumptions and adapts to each tool's unique miscalibration pattern—particularly important when different models exhibit systematically different calibration errors.
 
-print(calibrated_scores)
-# {
-#     "DenseNet-121": 0.89,      # Already [0,1], kept as-is
-#     "LLaVA-Med": 0.87,         # Extracted from text, normalized
-#     "Maira-2": 0.85            # Kept as-is
-# }
-```
+**Temperature Scaling** applies a single learned parameter *T* to the model's logits before softmax normalization. When *T* > 1, the distribution is softened, correcting for overconfident models; when *T* < 1, the distribution is sharpened, correcting for underconfident models. This method preserves the model's internal ranking while adjusting the magnitude of expressed confidence.
 
-**Calibration Methods**:
-
-1. **Min-Max Normalization**: Scale raw outputs to [0, 1]
-   - Formula: `normalized = (value - min) / (max - min)`
-   - Applied when confidence bounds are known
-
-2. **Isotonic Regression**: Learn perfect calibration from historical data
-   - Non-parametric approach that monotonically maps raw scores to probabilities
-   - Uses historical expert-verified resolutions to compute calibration curve
-   - More accurate than temperature scaling for heterogeneous models
-
-3. **Temperature Scaling**: Adjust confidence temperature for perfect calibration
-   - Formula: `p_calibrated = softmax(logits / T)`
-   - T > 1: soften predictions (reduce overconfidence)
-   - T < 1: sharpen predictions (increase confidence spread)
-   - Preserves ranking while improving calibration
-
-4. **Confidence Fusion**: Weighted average using trust weights
-   - Formula: `fused_confidence = Σ(weight_i × confidence_i) / Σ(weight_i)`
-   - Weights learned from historical performance (see Layer 4)
-   - Produces single calibrated confidence from multiple tool outputs
+After calibration, scores from multiple tools are fused into a single per-finding confidence estimate via a trust-weighted average: *C*_fused = Σ(*w*_*i* × *c*_*i*) / Σ(*w*_*i*), where *w*_*i* is the trust weight for tool *i* (see Layer 4) and *c*_*i* is its calibrated confidence. This formulation naturally privileges historically reliable tools while still incorporating evidence from all sources.
 
 ---
 
-### 3. Argumentation Graphs
+### Layer 3: Argumentation Graphs
 
-Structures conflicts as explicit argument graphs for **transparent reasoning and explainability**:
+Once conflicts are detected and confidence scores are calibrated, the pipeline structures the disagreement as a formal weighted argumentation framework. For each contested finding (e.g., "Cardiomegaly is present"), an argument graph is constructed in which:
 
-```python
-from medrax.agent.argumentation_graph import ArgumentGraphBuilder
+- **Support nodes** represent tools whose calibrated confidence exceeds 0.5 for the finding, indicating agreement with the claim. Each node carries a *strength* value computed as the product of the tool's calibrated confidence and its trust weight.
+- **Attack nodes** represent tools whose calibrated confidence falls below 0.5, indicating disagreement. Their strength is computed analogously.
+- **Edges** connect nodes to the central claim, forming a bipartite support/attack structure.
 
-builder = ArgumentGraphBuilder()
+The graph produces four key metrics that drive downstream resolution:
 
-# Build argument graph from conflicting tool outputs
-graph = builder.build_from_conflict(
-    claim="Pneumothorax is present",
-    tools_involved=["DenseNet-121", "CheXagent", "LLaVA-Med"],
-    confidences=[0.92, 0.15, 0.88],
-    values=[True, False, True],
-    tool_trust_weights={
-        "DenseNet-121": 0.89,   # 89% historically accurate
-        "CheXagent": 0.76,      # 76% historically accurate
-        "LLaVA-Med": 0.82       # 82% historically accurate
-    }
-)
+**Support Strength** is the sum of weighted strengths across all supporting tools. **Attack Strength** is the corresponding sum for opposing tools. The **Confidence Gap** is the absolute difference between support and attack strengths, indicating how decisive the evidence is. **Certainty** normalizes the gap by total strength, producing a score in [0, 1] where values near 1.0 indicate overwhelming consensus and values near 0.0 indicate an evenly split decision.
 
-print(graph)
-# ArgumentGraph(
-#     claim='Pneumothorax is present',
-#     support=[
-#         ArgumentNode(DenseNet-121: 0.92 weighted=0.82),
-#         ArgumentNode(LLaVA-Med: 0.88 weighted=0.72)
-#     ],
-#     attack=[
-#         ArgumentNode(CheXagent: 0.15 weighted=0.11)
-#     ],
-#     support_strength=1.54,
-#     attack_strength=0.11,
-#     certainty=0.93,
-#     net_winner="support"
-# )
-```
+A critical safety feature is **cycle detection**. In adversarial or degenerate cases, circular dependencies may arise where tool A supports tool B which supports tool C which contradicts tool A. The graph builder performs a topological analysis to identify such cycles, which are flagged as grounds for automatic abstention (see Layer 5).
 
-**Key Metrics**:
-- **Support Strength**: Sum of confidences × trust weights from tools supporting the claim
-- **Attack Strength**: Sum from tools attacking the claim
-- **Certainty**: How dominant the winner is (0.0 = unclear, 1.0 = certain)
-- **Net Winner**: "support", "attack", or "unclear"
+The argumentation graph also serves as the primary **explainability mechanism**. For each resolved conflict, the graph is serialized into a human-readable reasoning trace that a reviewing radiologist can inspect: which tools supported the final decision, with what strength, and why opposing evidence was discounted. This transparency is essential for clinical trust and regulatory compliance.
 
-**Explainability Output** (for radiologist review):
-```
-CLAIM: "Pneumothorax is present"
+---
 
-SUPPORT (83.1% probability):
-  ✓ DenseNet-121: 92% confident (trust: 89%) → weighted strength: 0.82
-  ✓ LLaVA-Med: 88% confident (trust: 82%) → weighted strength: 0.72
-  Total support: 1.54
+### Layer 4: Tool Trust Management
 
-ATTACK (6.9% probability):
-  ✗ CheXagent: 85% confident it's ABSENT (trust: 76%) → weighted strength: 0.11
-  Total attack: 0.11
+Not all tools are equally reliable across all pathologies and clinical scenarios. MedRAX learns tool-specific trust weights through a persistent, incrementally updated tracking system. Each tool maintains a record of its historical performance: the number of cases in which its output was verified as correct versus incorrect by expert review or downstream validation.
 
-DECISION: Support overwhelmingly (certainty: 0.93)
-RISK: Low - clear consensus among high-trust models
-```
+The trust weight for tool *i* is computed as: *w*_*i* = *n*_correct / *n*_total, where *n*_correct is the cumulative count of verified correct predictions and *n*_total is the total number of evaluated predictions. Tools are initialized with a neutral prior (default weight of 1.0, backed by 10 pseudo-observations) to avoid cold-start instability while allowing rapid adaptation as real performance data accumulates.
 
-### 4. Tool Trust Management
+Trust weights influence the pipeline at two critical points. First, they modulate the strength of each tool's contribution in the argumentation graph (Layer 3), ensuring that historically unreliable tools exert less influence on conflict resolution. Second, they weight the confidence fusion formula (Layer 2), so that the fused confidence score naturally gravitates toward the estimates of trusted tools.
 
-Learns which tools are reliable over time:
+Weights are persisted to disk as a JSON file and survive application restarts, enabling continuous learning across sessions. After each conflict resolution, the trust manager receives feedback on which tools were ultimately correct, updates their records, and saves the updated weights. Over time, this creates an adaptive system that self-corrects: if a tool's performance degrades due to distribution shift or model drift, its trust weight automatically decreases, reducing its impact on future decisions.
 
-```python
-from medrax.agent.tool_trust import ToolTrustManager
+---
 
-# Initialize or load existing trust weights
-trust_manager = ToolTrustManager(
-    persistence_file="tool_trust_weights.json"
-)
+### Layer 5: Intelligent Abstention
 
-# Initialize tools with neutral trust
-trust_manager.initialize_tool("DenseNet-121", initial_weight=1.0)
-trust_manager.initialize_tool("LLaVA-Med", initial_weight=1.0)
+The final layer addresses a fundamental requirement of clinical AI systems: the ability to recognize the limits of its own competence. Rather than forcing a resolution when the evidence is ambiguous or insufficient, MedRAX implements a principled abstention mechanism that defers to human expertise under specific, well-defined conditions.
 
-# After expert reviews a resolved conflict:
-# If DenseNet-121 was correct:
-trust_manager.update_tool_trust("DenseNet-121", was_correct=True)
-# DenseNet: 1 correct / 1 total = 1.0 weight
+Abstention is triggered by any of the following five conditions:
 
-# If CheXagent was wrong:
-trust_manager.update_tool_trust("CheXagent", was_correct=False)
-# CheXagent: 0 correct / 1 total = 0.0 weight
+**Insufficient Evidence.** Fewer than two tools have reported on the finding in question. A single-tool opinion provides no basis for conflict assessment or confidence fusion and is flagged for human review.
 
-# Get current trust profile
-weights = trust_manager.get_all_weights()
-# {
-#     "DenseNet-121": 0.92,      # 92% accurate
-#     "LLaVA-Med": 0.78,         # 78% accurate
-#     "CheXagent": 0.71,         # 71% accurate
-#     "Maira-2": 0.85            # 85% accurate
-# }
+**Circular Logic.** The argumentation graph contains cycles, indicating that the tools' positions form a logically incoherent structure. No reliable resolution can be derived from circular evidence.
 
-# Weights automatically persist to JSON
-# Survives application restarts
-```
+**Close Vote.** The gap between support strength and attack strength falls below a configurable threshold (default: 0.2). When evidence is nearly evenly split, any resolution would be statistically indistinguishable from a coin flip.
 
-**Impact**: Higher-trust tools get more weight in voting and confidence fusion.
+**High Uncertainty.** The overall certainty score from the argumentation graph falls below a minimum confidence threshold (default: 0.6). This catches cases where many tools report but none with strong conviction.
 
-### 5. Intelligent Abstention Logic
+**Critical Finding with Insufficient Certainty.** For life-threatening findings—tension pneumothorax, massive pleural effusion, acute pulmonary edema—the certainty threshold is elevated (default: 0.8). The clinical cost of a wrong decision on such findings is asymmetrically high, and the system applies a correspondingly higher evidentiary bar before committing to a resolution.
 
-Knows when to say "I don't know" instead of forcing a decision:
+When abstention is triggered, the system returns a structured deferral response containing the reason for abstention, the current confidence level, a risk assessment (low/medium/high), and a human-readable explanation. The finding is explicitly flagged for radiologist review. Critically, human feedback on deferred cases is fed back into the trust management system (Layer 4), creating a closed learning loop that improves future resolution quality.
 
-```python
-from medrax.agent.abstention_logic import AbstentionLogic
+---
 
-abstention = AbstentionLogic(
-    close_vote_thr=0.2,           # Abstain if gap < 20%
-    uncertainty_thr=0.6,          # Abstain if certainty < 60%
-    critical_certainty_thr=0.8,   # For life-threatening: need 80%
-    min_tools=2                   # Need ≥2 tools reporting
-)
+### End-to-End Pipeline Integration
 
-# Check if we should abstain from making a decision
-decision = abstention.should_abstain(
-    support_strength=0.92,        # Tools supporting the claim
-    attack_strength=0.78,         # Tools attacking the claim
-    certainty=0.45,               # How certain are we?
-    has_cycles=False,             # Any circular logic?
-    clinical_severity="critical", # Life-threatening finding
-    num_tools=3
-)
+The five layers operate as a single, integrated pipeline rather than as isolated modules. When the agent receives outputs from its constituent tools, the flow proceeds as follows:
 
-print(decision.to_dict())
-# {
-#     "should_abstain": True,
-#     "reason": "overall_confidence_too_low",
-#     "confidence": 0.45,
-#     "explanation": "Pneumothorax detection has low certainty (45%). For critical findings, we need 80%+. Recommend human radiologist review.",
-#     "risk_level": "high"
-# }
-```
+1. All tool outputs are first converted into a unified canonical schema (`CanonicalFinding`) that standardizes pathology names, anatomical regions, confidence scores, and evidence types across all tool formats.
 
-**Abstention Triggers**:
-1. **Circular Logic**: Graph has cycles (tools creating circular justifications)
-2. **Close Vote**: Support vs attack strengths are too similar
-3. **High Uncertainty**: Overall certainty below threshold
-4. **Critical Findings Unclear**: Life-threatening findings need higher confidence bar
-5. **Insufficient Data**: Fewer than 2 tools reporting
+2. The conflict detection engine (Layer 1) groups findings by pathology and applies BERT-NLI, confidence gap analysis, and GACL validation in sequence. Each detected conflict is annotated with its type (presence, location, severity, or semantic), the tools involved, and a severity grade.
 
-### Full Conflict Resolution Workflow Example
+3. For each conflict, the confidence calibration pipeline (Layer 2) normalizes all involved tools' scores to a common scale using the appropriate task-specific extractor and calibration method.
 
-```python
-from medrax.agent.conflict_resolution import ConflictResolver
+4. The argumentation graph builder (Layer 3) constructs a support/attack graph using the calibrated confidences and current trust weights, computing strength totals, certainty, and checking for cycles.
 
-resolver = ConflictResolver(
-    deferral_threshold=0.6,
-    enable_bert_detection=True,
-    enable_gacl_validation=True
-)
+5. The abstention logic (Layer 5) evaluates whether the graph's certainty, vote margin, and clinical context meet the minimum thresholds for automated resolution. If not, the finding is deferred with a full explanation.
 
-# Scenario: Tools give conflicting CXR interpretations
-tool_results = {
-    "DenseNet-121": {
-        "cardiomegaly": {"confidence": 0.89, "present": True}
-    },
-    "CheXagent": {
-        "cardiomegaly": {"confidence": 0.25, "present": False}
-    },
-    "LLaVA-Med": {
-        "report": "Heart size is enlarged, consistent with cardiomegaly"
-    }
-}
+6. If resolution proceeds, a fallback hierarchy determines the winner: BERT-guided resolution for high-confidence contradictions, task-specific expertise arbitration (e.g., trusting the classifier over the VQA model for binary presence detection), or trust-weighted voting as a last resort.
 
-# Run full conflict resolution pipeline
-resolution = resolver.resolve_conflicts(tool_results)
+7. The trust manager (Layer 4) receives the resolution outcome. When expert feedback is available, it updates the involved tools' trust weights and persists them for future sessions.
 
-print(resolution)
-# {
-#     "finding": "Cardiomegaly",
-#     "resolved_value": True,
-#     "confidence": 0.88,
-#     "method": "argumentation_graph_with_bert_validation",
-#     "bert_conflict_score": 0.91,  # BERT detected contradiction
-#     "support_tools": ["DenseNet-121", "LLaVA-Med"],
-#     "attack_tools": ["CheXagent"],
-#     "reasoning": "DenseNet-121 and LLaVA-Med strongly support cardiomegaly...",
-#     "should_defer_to_human": False,
-#     "risk_level": "low"
-# }
+8. The complete resolution—including the finding, resolved value, calibrated confidence, argumentation graph, reasoning chain, and any abstention flags—is logged to a timestamped JSON file for audit, analysis, and regulatory traceability.
 
-# If should_defer_to_human == True:
-# → Result marked for expert radiologist review
-# → Confidence capped at deferral_threshold
-# → Human feedback used to update trust weights
-```
+---
 
-### Configuration
+### Design Principles
 
-Enable/disable conflict resolution in the agent:
+The conflict resolution pipeline is guided by several principles drawn from clinical decision support literature:
 
-```python
-from medrax.agent.agent import Agent
+**Safety over accuracy.** The system is designed to err on the side of caution. When in doubt, it abstains and defers to a human rather than committing to a potentially harmful decision. The asymmetric certainty thresholds for critical findings reflect this philosophy.
 
-agent = Agent(
-    model=llm,
-    tools=tools,
-    enable_conflict_resolution=True,      # Enable pipeline
-    conflict_sensitivity=0.4,              # Detection sensitivity [0-1]
-    deferral_threshold=0.6                 # Certainty threshold for human review
-)
+**Transparency over opacity.** Every resolution is accompanied by a complete reasoning trace, from raw tool outputs through calibration, argumentation, and final decision. This enables radiologists to verify the system's logic and builds the trust necessary for clinical adoption.
 
-# Log conflicts to file for analysis
-# Logs saved to: logs/conflict_resolution_TIMESTAMP.json
-```
+**Adaptivity over rigidity.** The trust management and calibration systems learn continuously from resolved cases, adapting to changes in tool performance, patient population, and imaging protocols without requiring retraining or manual reconfiguration.
 
-### Conflict Resolution Outputs
-
-All conflicts are logged with full traceability:
-
-```json
-{
-  "timestamp": "2025-02-06T10:30:45.123Z",
-  "case_id": "CXR_001",
-  "findings": [
-    {
-      "finding": "Pneumothorax",
-      "initial_values": ["present", "absent", "present"],
-      "initial_confidences": [0.92, 0.15, 0.88],
-      "conflict_type": "presence",
-      "conflict_severity": "critical",
-      "bert_analysis": {
-        "contradiction_prob": 0.87,
-        "entailment_prob": 0.08,
-        "neutral_prob": 0.05
-      },
-      "resolved_value": "present",
-      "resolved_confidence": 0.90,
-      "reasoning_chain": [
-        "BERT detected high contradiction probability (0.87)",
-        "Argumentation graph: support_strength=1.80 > attack_strength=0.15",
-        "Anatomical validation: pneumothorax and effusion compatible",
-        "Trust-weighted voting: DenseNet (0.89) + LLaVA-Med (0.82) >> CheXagent (0.76)"
-      ],
-      "human_review_required": false,
-      "risk_assessment": "low"
-    }
-  ]
-}
-```
+**Generality over specificity.** The GACL anatomical consistency framework uses universal attribute axes rather than disease-specific rules, enabling it to validate findings for any CXR pathology—including novel conditions not present in the training data—without modification.
 
 <br>
 
