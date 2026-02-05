@@ -60,7 +60,8 @@ class Agent:
         checkpointer (Any): Manages and persists the agent's state.
         system_prompt (str): The system instructions for the agent.
         workflow (StateGraph): The compiled workflow for the agent's processing.
-        log_tools (bool): Whether to log tool calls.        log_path (Path): Path to save tool call logs.
+        log_tools (bool): Whether to log tool calls.
+        log_path (Path): Path to save tool call logs.
     """
 
     def __init__(
@@ -96,12 +97,15 @@ class Agent:
         if self.log_tools:
             self.log_path = Path(log_dir or "logs")
             self.log_path.mkdir(exist_ok=True)
-          # Initialize conflict detection and resolution
+        
+        # Initialize conflict detection and resolution
         if self.enable_conflict_resolution:
             self.conflict_detector = ConflictDetector(sensitivity=conflict_sensitivity)
             self.conflict_resolver = ConflictResolver(deferral_threshold=deferral_threshold)
             self.probabilistic_graph = ProbabilisticConflictGraph(sensitivity=conflict_sensitivity)
-            print(f"✅ Conflict resolution enabled (sensitivity={conflict_sensitivity}, deferral={deferral_threshold})")# Define the agent workflow
+            print(f"✅ Conflict resolution enabled (sensitivity={conflict_sensitivity}, deferral={deferral_threshold})")
+        
+        # Define the agent workflow
         workflow = StateGraph(AgentState)
         workflow.add_node("process", self.process_request)
         workflow.add_node("execute", self.execute_tools)
@@ -139,7 +143,8 @@ class Agent:
             state (AgentState): The current state of the agent.
 
         Returns:
-            bool: True if tool calls exist, False otherwise.        """
+            bool: True if tool calls exist, False otherwise.
+        """
         response = state["messages"][-1]
         return len(response.tool_calls) > 0
 
@@ -148,7 +153,9 @@ class Agent:
         Execute tool calls from the model's response with conflict detection and resolution.
 
         Args:
-            state (AgentState): The current state of the agent.        Returns:
+            state (AgentState): The current state of the agent.
+
+        Returns:
             Dict[str, List[ToolMessage]]: A dictionary containing tool execution results.
         """
         tool_calls = state["messages"][-1].tool_calls
@@ -169,7 +176,7 @@ class Agent:
             else:
                 try:
                     result = self.tools[call["name"]].invoke(call["args"])
-                    print(f"  ✅ Execution successful")
+                    print("  ✅ Execution successful")
                     
                     # STEP 2: Normalize output to canonical format (if conflict resolution enabled)
                     if self.enable_conflict_resolution:
@@ -201,8 +208,8 @@ class Agent:
         
         if self.enable_conflict_resolution and len(canonical_findings) > 1:
             print(f"\n{'='*60}")
-            print(f"🔍 CONFLICT DETECTION")
-            print(f"{'='*60}")
+            print("🔍 CONFLICT DETECTION")
+            print("="*60)
             print(f"Analyzing {len(canonical_findings)} canonical findings...")
             
             conflicts = self.conflict_detector.detect_conflicts(canonical_findings)
@@ -230,7 +237,7 @@ class Agent:
                     print(f"  Resolution: {resolution['decision']}")
                     print(f"  Confidence: {resolution['confidence']:.1%}")
                     if resolution.get('should_defer', False):
-                        print(f"  ⚠️  FLAGGED FOR HUMAN REVIEW")
+                        print("  ⚠️  FLAGGED FOR HUMAN REVIEW")
                 
                 # Generate conflict report
                 conflict_report = generate_conflict_report(conflicts, resolutions)
@@ -245,7 +252,7 @@ class Agent:
                 results.append(conflict_message)
                 print(f"\n📋 Conflict report added to results")
             else:
-                print(f"✅ No conflicts detected - all tools agree")
+                print("✅ No conflicts detected - all tools agree")
         
         # STEP 5: Save comprehensive logs
         if self.enable_conflict_resolution:
@@ -254,7 +261,7 @@ class Agent:
             self._save_tool_calls(results)
         
         print(f"\n{'='*60}")  
-        print(f"✅ Tool execution complete")
+        print("✅ Tool execution complete")
         print("="*60 + "\n")
         print("Returning to model processing!")
 
@@ -284,7 +291,7 @@ class Agent:
         graph_edges, graph_analysis = self.probabilistic_graph.build_graph(canonical_findings)
         
         # Print calibration analysis
-        print(f"\n📊 CALIBRATION ANALYSIS")
+        print("\n📊 CALIBRATION ANALYSIS")
         print("="*60)
         calibration_analysis = analyze_tool_calibration(canonical_findings)
         for tool, metrics in calibration_analysis.items():
@@ -295,7 +302,7 @@ class Agent:
             print(f"  Entropy: {metrics['entropy_mean']:.3f}")
         
         # Print graph analysis
-        print(f"\n🔗 GRAPH ANALYSIS")
+        print("\n🔗 GRAPH ANALYSIS")
         print("="*60)
         print(f"Total nodes: {graph_analysis['total_nodes']}")
         print(f"Total edges (conflicts): {graph_analysis['total_edges']}")
