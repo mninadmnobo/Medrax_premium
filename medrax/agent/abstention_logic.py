@@ -87,7 +87,8 @@ class AbstentionLogic:
         certainty: float,
         has_cycles: bool,
         clinical_severity: str = "moderate",
-        num_tools: int = 2
+        num_tools: int = 2,
+        bert_contradiction_prob: float = 0.0
     ) -> AbstentionDecision:
         """
         Main decision: should we abstain from making a resolution?

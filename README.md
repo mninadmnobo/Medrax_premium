@@ -147,11 +147,11 @@ The primary detection mechanism leverages a fine-tuned DeBERTa model (Microsoft 
 - **Entailment**: The statements express the same clinical finding, possibly in different terminology (e.g., *"pneumothorax present"* versus *"lung is collapsed"*). No conflict exists; outputs can be fused directly.
 - **Neutral**: The statements address different aspects of the image and neither support nor contradict each other. No direct conflict is raised.
 
-The NLI approach is critical because naive string-matching or keyword-based methods fail catastrophically on medical text, where synonyms, paraphrases, and terminology variations are pervasive. The model produces a full probability distribution over all three classes, and a conflict is flagged when the contradiction probability exceeds a configurable threshold (default: 0.7).
+The NLI approach is critical because naive string-matching or keyword-based methods fail catastrophically on medical text, where synonyms, paraphrases, and terminology variations are pervasive. The model produces a full probability distribution over all three classes, and a conflict is flagged when the contradiction probability exceeds a configurable threshold (default: 0.6, tuned lower for medical text to improve recall on clinically significant disagreements).
 
 #### Rule-Based Confidence Gap Analysis
 
-When tools produce structured numerical outputs rather than free text — such as classification probability vectors — the system falls back to a computationally lightweight rule-based method. It computes the absolute difference between confidence scores assigned to the same finding by different tools. If this gap exceeds a sensitivity threshold (default: 0.4), a conflict is registered. The detected conflicts are further triaged into severity levels: **critical** (gap > 0.7), **moderate** (gap between 0.4 and 0.7), and **minor** (gap < 0.4). This stratification directly influences how aggressively the downstream resolution layers handle the disagreement.
+When tools produce structured numerical outputs rather than free text — such as classification probability vectors — the system falls back to a computationally lightweight rule-based method. It computes the absolute difference between confidence scores assigned to the same finding by different tools. A presence conflict is registered when this gap exceeds a sensitivity threshold (default: 0.4) and the tools straddle the presence decision boundary (one tool reports confidence above 0.7, indicating presence, while another reports below 0.3, indicating absence). Conflicts are triaged into severity levels based on the strength of the disagreement: a conflict is classified as **critical** when the highest-confidence tool exceeds 0.85, and **moderate** otherwise. For BERT-detected semantic conflicts, severity is determined by the contradiction probability: above 0.85 is **critical**, between 0.7 and 0.85 is **moderate**, and below 0.7 is **minor**. This stratification directly influences how aggressively the downstream resolution layers handle the disagreement.
 
 #### Anatomical Consistency Validation (GACL)
 
@@ -235,7 +235,7 @@ The abstention module evaluates five conditions, any one of which is sufficient 
 
 5. **Critical Finding with Insufficient Certainty**: For findings classified as clinically critical — including pneumothorax, tension pneumothorax, large pleural effusions, and other life-threatening conditions — the certainty threshold is elevated to 0.8. This asymmetric threshold reflects the medical principle that the cost of a false negative on a critical finding far exceeds the cost of a false positive.
 
-When abstention is triggered, the system caps the output confidence at the deferral threshold, attaches a structured explanation of why abstention occurred, assigns a risk level (low, medium, or high), and flags the case for human review. Importantly, the human expert's subsequent decision is fed back into Layer 4 to update the trust weights of the involved tools, creating a closed learning loop that improves system performance over time.
+When abstention is triggered, the system sets the output confidence to zero, attaches a structured explanation of why abstention occurred, assigns a risk level (low, medium, or high), and flags the case for human review. Importantly, the human expert's subsequent decision is fed back into Layer 4 to update the trust weights of the involved tools, creating a closed learning loop that improves system performance over time.
 
 ---
 
@@ -247,15 +247,15 @@ The DenseNet-121 classifier reports cardiomegaly as present with 89% confidence.
 
 **Layer 1** detects the conflict through two independent channels: the BERT-NLI model identifies a semantic contradiction between CheXagent's "absent" determination and LLaVA-Med's "enlarged cardiac silhouette" report (contradiction probability: 0.91), and the rule-based method flags the 0.64 confidence gap between DenseNet-121 and CheXagent as a moderate-severity conflict.
 
-**Layer 2** calibrates the raw scores. DenseNet-121's 0.89 is adjusted to 0.87 using its learned calibration curve (the model is known to be slightly overconfident). LLaVA-Med's textual output is mapped to a numerical confidence of 0.85 based on its language patterns. CheXagent's 0.75 confidence in absence is inverted to 0.25 confidence in presence.
+**Layer 2** calibrates the raw scores. DenseNet-121's 0.89 is adjusted to 0.87 using its learned calibration curve (the model is known to be slightly overconfident). LLaVA-Med's textual output is mapped to a numerical confidence of 0.72 based on its language patterns. CheXagent's 0.75 confidence in absence is inverted to 0.25 confidence in presence.
 
-**Layer 3** constructs the argumentation graph. DenseNet-121 (strength: 0.87 × 0.92 trust = 0.80) and LLaVA-Med (strength: 0.85 × 0.82 trust = 0.70) form the support camp with aggregate strength 1.50. CheXagent (strength: 0.25 × 0.76 trust = 0.19) forms the attack camp. The certainty score is 0.89, and no cycles are detected.
+**Layer 3** constructs the argumentation graph. DenseNet-121 (strength: 0.87 × 0.92 trust = 0.80) and LLaVA-Med (strength: 0.72 × 0.82 trust = 0.59) form the support camp with aggregate strength 1.39. CheXagent (strength: 0.25 × 0.76 trust = 0.19) forms the attack camp. The certainty score is 0.88, and no cycles are detected.
 
 **Layer 4** confirms that DenseNet-121 carries the highest trust weight (0.92) based on 92 correct predictions out of 100 historical cases for cardiac pathology.
 
-**Layer 5** evaluates abstention criteria: three tools are reporting (sufficient), no cycles exist, the gap is 1.31 (well above 0.2), certainty is 0.89 (above both the general 0.6 and critical 0.8 thresholds). All criteria pass — the system proceeds with the resolution.
+**Layer 5** evaluates abstention criteria: three tools are reporting (sufficient), no cycles exist, the gap is 1.20 (well above 0.2), certainty is 0.88 (above both the general 0.6 and critical 0.8 thresholds). All criteria pass — the system proceeds with the resolution.
 
-The final output is: cardiomegaly **present**, calibrated confidence **0.88**, supported by DenseNet-121 and LLaVA-Med, opposed by CheXagent, with full reasoning trace and no human review required.
+The final output is: cardiomegaly **present**, calibrated confidence **0.84**, supported by DenseNet-121 and LLaVA-Med, opposed by CheXagent, with full reasoning trace and no human review required.
 
 ---
 
@@ -267,7 +267,7 @@ Every conflict resolution is logged with complete traceability, including the in
 
 ## Installation
 ### Prerequisites
-- Python 3.8+
+- Python 3.10+
 - CUDA/GPU for best performance
 
 ### Installation Steps
