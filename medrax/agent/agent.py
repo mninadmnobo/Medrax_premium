@@ -12,7 +12,6 @@ from langchain_core.tools import BaseTool
 
 from .canonical_output import normalize_output, CanonicalFinding
 from .conflict_resolution import ConflictDetector, ConflictResolver, generate_conflict_report
-from .probabilistic_conflict_graph import ProbabilisticConflictGraph, analyze_tool_calibration
 
 _ = load_dotenv()
 
@@ -102,7 +101,6 @@ class Agent:
         if self.enable_conflict_resolution:
             self.conflict_detector = ConflictDetector(sensitivity=conflict_sensitivity)
             self.conflict_resolver = ConflictResolver(deferral_threshold=deferral_threshold)
-            self.probabilistic_graph = ProbabilisticConflictGraph(sensitivity=conflict_sensitivity)
             print(f"✅ Conflict resolution enabled (sensitivity={conflict_sensitivity}, deferral={deferral_threshold})")
         
         # Define the agent workflow
@@ -281,36 +279,6 @@ class Agent:
             return "report"
         else:
             return "unknown"
-    
-    def _detect_conflicts_with_probabilistic_graph(self, canonical_findings: List[CanonicalFinding]) -> Tuple[List, Dict]:
-        """
-        Use probabilistic conflict graph for sophisticated conflict detection.
-        
-        Based on uncertainty quantification and ensemble disagreement methods.
-        """
-        graph_edges, graph_analysis = self.probabilistic_graph.build_graph(canonical_findings)
-        
-        # Print calibration analysis
-        print("\n📊 CALIBRATION ANALYSIS")
-        print("="*60)
-        calibration_analysis = analyze_tool_calibration(canonical_findings)
-        for tool, metrics in calibration_analysis.items():
-            print(f"Tool: {tool}")
-            print(f"  Samples: {metrics['sample_count']}")
-            print(f"  Confidence: μ={metrics['confidence_mean']:.3f} σ={metrics['confidence_std']:.3f}")
-            print(f"  Range: [{metrics['confidence_min']:.3f}, {metrics['confidence_max']:.3f}]")
-            print(f"  Entropy: {metrics['entropy_mean']:.3f}")
-        
-        # Print graph analysis
-        print("\n🔗 GRAPH ANALYSIS")
-        print("="*60)
-        print(f"Total nodes: {graph_analysis['total_nodes']}")
-        print(f"Total edges (conflicts): {graph_analysis['total_edges']}")
-        print(f"Conflict density: {graph_analysis['conflict_density']:.2%}")
-        print(f"Critical conflicts: {graph_analysis['critical_conflicts']}")
-        print(f"Moderate conflicts: {graph_analysis['moderate_conflicts']}")
-        
-        return graph_edges, graph_analysis
     
     def _save_tool_calls_with_conflicts(
         self, 
