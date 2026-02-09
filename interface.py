@@ -201,6 +201,7 @@ def create_demo(agent, tools_dict):
                         show_label=True,
                         elem_classes="chat-box",
                         label="Agent",
+                        type="messages",
                         avatar_images=(
                             None,
                             "assets/medrax_logo.jpg",
