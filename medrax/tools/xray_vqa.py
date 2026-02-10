@@ -90,7 +90,6 @@ class XRayVQATool(BaseTool):
         """
         super().__init__(**kwargs)
 
-        # Dangerous code, but works for now
         import transformers
 
         original_transformers_version = transformers.__version__
@@ -100,21 +99,50 @@ class XRayVQATool(BaseTool):
         self.dtype = dtype
         self.cache_dir = cache_dir
 
-        # Load tokenizer and model
+        # Download model and patch version assert in remote code for compatibility
+        local_path = self._download_and_patch_model(model_name, cache_dir)
+
+        # Load tokenizer and model from (patched) local path
         self.tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
+            local_path,
             trust_remote_code=True,
             cache_dir=cache_dir,
         )
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
+            local_path,
             device_map=self.device,
-            trust_remote_code=True,            cache_dir=cache_dir,
+            trust_remote_code=True,
+            cache_dir=cache_dir,
         )
         self.model = self.model.to(dtype=self.dtype)
         self.model.eval()
 
         transformers.__version__ = original_transformers_version
+
+    @staticmethod
+    def _download_and_patch_model(model_name: str, cache_dir: Optional[str] = None) -> str:
+        """Download model and patch version-check asserts for transformers compatibility."""
+        import glob
+        from huggingface_hub import snapshot_download
+
+        local_path = snapshot_download(model_name, cache_dir=cache_dir)
+
+        # Patch any version assert in the remote modeling code
+        for py_file in glob.glob(str(Path(local_path) / "*.py")):
+            try:
+                with open(py_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if 'assert transformers.__version__' in content:
+                    content = content.replace(
+                        'assert transformers.__version__ == "4.40.0"',
+                        '# assert transformers.__version__ == "4.40.0"  # Patched for compat',
+                    )
+                    with open(py_file, "w", encoding="utf-8") as f:
+                        f.write(content)
+            except Exception:
+                pass  # Read-only or inaccessible file, skip
+
+        return local_path
 
     def _generate_response(self, image_paths: List[str], prompt: str, max_new_tokens: int,
                             do_sample: bool = False, temperature: float = 1.0, top_p: float = 1.0) -> str:

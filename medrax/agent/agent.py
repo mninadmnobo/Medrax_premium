@@ -240,15 +240,13 @@ class Agent:
                 # Generate conflict report
                 conflict_report = generate_conflict_report(conflicts, resolutions)
                 
-                # Add conflict report as a special tool message
-                conflict_message = ToolMessage(
-                    tool_call_id="conflict_analysis",
-                    name="ConflictAnalyzer",
-                    args={},
-                    content=conflict_report
-                )
-                results.append(conflict_message)
-                print(f"\n📋 Conflict report added to results")
+                # Append conflict report to the LAST real tool result
+                # (Adding a separate ToolMessage with no matching tool_call
+                #  causes OpenAI API 400: "messages with role 'tool' must be
+                #  a response to a preceding message with 'tool_calls'")
+                if results:
+                    results[-1].content += f"\n\n--- CONFLICT ANALYSIS ---\n{conflict_report}"
+                print(f"\n📋 Conflict report appended to last tool result")
             else:
                 print("✅ No conflicts detected - all tools agree")
         
