@@ -12,15 +12,48 @@ from langchain_core.tools import BaseTool
 from PIL import Image
 
 
-from medrax.llava.conversation import conv_templates
-from medrax.llava.model.builder import load_pretrained_model
-from medrax.llava.mm_utils import tokenizer_image_token, process_images
-from medrax.llava.constants import (
-    IMAGE_TOKEN_INDEX,
-    DEFAULT_IMAGE_TOKEN,
-    DEFAULT_IM_START_TOKEN,
-    DEFAULT_IM_END_TOKEN,
-)
+# Lazy imports to avoid transformers compatibility issues at module load time
+# These are loaded when LlavaMedTool is actually instantiated
+_llava_imports_loaded = False
+conv_templates = None
+load_pretrained_model = None
+tokenizer_image_token = None
+process_images = None
+IMAGE_TOKEN_INDEX = None
+DEFAULT_IMAGE_TOKEN = None
+DEFAULT_IM_START_TOKEN = None
+DEFAULT_IM_END_TOKEN = None
+
+
+def _lazy_load_llava():
+    """Load LLaVA dependencies on first use."""
+    global _llava_imports_loaded, conv_templates, load_pretrained_model
+    global tokenizer_image_token, process_images
+    global IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+    
+    if _llava_imports_loaded:
+        return
+    
+    from medrax.llava.conversation import conv_templates as _conv_templates
+    from medrax.llava.model.builder import load_pretrained_model as _load_pretrained_model
+    from medrax.llava.mm_utils import tokenizer_image_token as _tokenizer_image_token
+    from medrax.llava.mm_utils import process_images as _process_images
+    from medrax.llava.constants import (
+        IMAGE_TOKEN_INDEX as _IMAGE_TOKEN_INDEX,
+        DEFAULT_IMAGE_TOKEN as _DEFAULT_IMAGE_TOKEN,
+        DEFAULT_IM_START_TOKEN as _DEFAULT_IM_START_TOKEN,
+        DEFAULT_IM_END_TOKEN as _DEFAULT_IM_END_TOKEN,
+    )
+    
+    conv_templates = _conv_templates
+    load_pretrained_model = _load_pretrained_model
+    tokenizer_image_token = _tokenizer_image_token
+    process_images = _process_images
+    IMAGE_TOKEN_INDEX = _IMAGE_TOKEN_INDEX
+    DEFAULT_IMAGE_TOKEN = _DEFAULT_IMAGE_TOKEN
+    DEFAULT_IM_START_TOKEN = _DEFAULT_IM_START_TOKEN
+    DEFAULT_IM_END_TOKEN = _DEFAULT_IM_END_TOKEN
+    _llava_imports_loaded = True
 
 
 class LlavaMedInput(BaseModel):
@@ -65,6 +98,7 @@ class LlavaMedTool(BaseTool):
         **kwargs,
     ):
         super().__init__()
+        _lazy_load_llava()  # Load LLaVA dependencies on first use
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(
             model_path=model_path,
             model_base=None,
