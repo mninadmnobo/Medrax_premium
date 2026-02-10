@@ -375,9 +375,13 @@ class ConflictDetector:
         if not self.bert_detector:
             return conflicts
         
-        # Compare all pairs of findings
+        # Compare all pairs of findings from DIFFERENT tools only.
+        # Same tool called on different images is NOT a conflict.
         for i, finding1 in enumerate(findings):
             for finding2 in findings[i + 1:]:
+                # Skip same-tool comparisons (e.g. classifier on image1 vs image2)
+                if finding1.source_tool == finding2.source_tool:
+                    continue
                 # Extract text from findings
                 text1 = self._extract_text_from_finding(finding1)
                 text2 = self._extract_text_from_finding(finding2)

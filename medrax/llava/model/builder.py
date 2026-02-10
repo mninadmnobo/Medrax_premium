@@ -47,7 +47,7 @@ def load_pretrained_model(
             model = LlavaMistralForCausalLM.from_pretrained(
                 model_path,
                 low_cpu_mem_usage=low_cpu_mem_usage,
-                use_flash_attention_2=False,
+                attn_implementation="eager",
                 cache_dir=cache_dir,
                 torch_dtype=torch_dtype,
                 **kwargs,

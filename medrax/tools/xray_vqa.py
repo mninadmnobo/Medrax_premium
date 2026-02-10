@@ -77,6 +77,8 @@ class XRayVQATool(BaseTool):
         device: Optional[str] = "cuda",
         dtype: torch.dtype = torch.bfloat16,
         cache_dir: Optional[str] = None,
+        load_in_4bit: bool = False,
+        load_in_8bit: bool = False,
         **kwargs: Any,
     ) -> None:
         """Initialize the XRayVQATool.
@@ -86,11 +88,14 @@ class XRayVQATool(BaseTool):
             device: Device to run model on (cuda/cpu)
             dtype: Data type for model weights
             cache_dir: Directory to cache downloaded models
+            load_in_4bit: Use 4-bit quantization (reduces VRAM from ~6GB to ~2GB)
+            load_in_8bit: Use 8-bit quantization
             **kwargs: Additional arguments
         """
         super().__init__(**kwargs)
 
         import transformers
+        from transformers import BitsAndBytesConfig
 
         original_transformers_version = transformers.__version__
         transformers.__version__ = "4.40.0"
@@ -101,6 +106,20 @@ class XRayVQATool(BaseTool):
 
         # Download model and patch version assert in remote code for compatibility
         local_path = self._download_and_patch_model(model_name, cache_dir)
+
+        # Setup quantization config
+        quant_kwargs = {}
+        if load_in_4bit:
+            quant_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=dtype,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+            )
+        elif load_in_8bit:
+            quant_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_8bit=True,
+            )
 
         # Load tokenizer and model from (patched) local path
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -113,8 +132,10 @@ class XRayVQATool(BaseTool):
             device_map=self.device,
             trust_remote_code=True,
             cache_dir=cache_dir,
+            **quant_kwargs,
         )
-        self.model = self.model.to(dtype=self.dtype)
+        if not (load_in_4bit or load_in_8bit):
+            self.model = self.model.to(dtype=self.dtype)
         self.model.eval()
 
         transformers.__version__ = original_transformers_version
